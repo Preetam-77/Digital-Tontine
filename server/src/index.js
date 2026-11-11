@@ -23,6 +23,14 @@ app.get("/", (req, res) => {
 
 app.use("/api/health", healthRoutes);
 
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "API endpoint not found",
+        path: req.originalUrl
+    });
+});
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
