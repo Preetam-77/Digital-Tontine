@@ -1,0 +1,2 @@
+{ "name": "tontine", "version": "0.1.0", "type": "module", "license": "MIT",
+  "scripts": { "test": "node --test tests/protocol.test.js", "demo": "node apps/web/serve.js" } }
