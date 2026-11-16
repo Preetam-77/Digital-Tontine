@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tontine</title>
+<style>
+:root{--bg:#f2f4f7;--ink:#16213a;--mute:#5a6580;--line:#d5dae4;--ind:#1b2a4a;--ok:#1f7a55;--gold:#e0a21b;--bad:#b3261e;--card:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#10162a;--ink:#eef1f8;--mute:#a4adc4;--line:#2b3556;--ind:#c9d4f5;--ok:#53c597;--gold:#f0b83a;--bad:#ff8a80;--card:#182040}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center}
+h1{font:700 1.5rem/1.2 Georgia,serif;margin:.4em 0}
+button{font:inherit;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--ind);background:var(--card);color:var(--ink);cursor:pointer}
+button.main{background:var(--ind);color:var(--bg)}button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+.pot{font:700 2.2rem Georgia,serif}.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);gap:8px}
+.row:first-of-type{border-top:0}.paid{color:var(--ok);font-weight:600}.miss{color:var(--mute)}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+code{font-size:.8rem;word-break:break-all;color:var(--mute)}#msg{min-height:1.5em;font-weight:600}.err{color:var(--bad)}.good{color:var(--ok)}
+</style></head><body><main>
+<header><h1 id="t"></h1><button id="lang" aria-label="Langue"></button></header>
+<div class="card"><div id="round"></div><div class="pot" id="pot"></div><div class="bar"><i id="prog"></i></div></div>
+<div class="card" id="members"></div>
+<div id="msg" role="status"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="main" id="pay"></button><button id="forge"></button><button id="next"></button></div>
+<p class="miss" id="note"></p>
+<details class="card"><summary id="lsum"></summary><div id="ledger"></div></details>
+</main>
+<script>
+// Demo only: mock Lightning (random preimages). Same verification rule as packages/protocol.
+const I18N={fr:{title:"Tontine Sandaga",round:(r,n)=>`Tour ${r} sur ${n}`,gets:"reçoit",pay:"Cotiser 5 000 sats",forge:"Tester un faux reçu",next:"Tour suivant",
+ you:"Vous",paid:"payé",miss:"en attente",ok:"Reçu vérifié : la preuve correspond au paiement.",bad:"Refusé : la preuve ne correspond pas au paiement.",dup:"Vous avez déjà cotisé ce tour.",winner:"Vous recevez ce tour, rien à payer.",
+ ledger:"Registre public",rel:"fiabilité",note:"Démo : paiements simulés. Aucun fonds n'est détenu par l'application.",wait:"Tour non terminé : il manque des cotisations.",end:"Cercle terminé."},
+ wo:{title:"Tontine Sandaga",round:(r,n)=>`Tour ${r} ci ${n}`,gets:"ngay jot",pay:"Fey 5 000 sats",forge:"Jéem reçu bu naqari",next:"Tour bu ci topp",
+ you:"Yaw",paid:"feyul na",miss:"ñëw ko",ok:"Preuve bi baax na.",bad:"Preuve bi baaxul.",dup:"Feyoon nga ko.",winner:"Yaw la tour bi, fey amul.",
+ ledger:"Registre",rel:"fiabilité",note:"Démo (brouillon wolof à faire relire par un locuteur natif).",wait:"Tour bi jeex na.",end:"Cercle bi jeex na."}};
+let lang="fr",round=1;const T=()=>I18N[lang];
+const names=["Awa","Moussa","Fatou","Ibrahima","Aminata"],N=names.length,AMT=5000,YOU=1;
+const order=[1,0,2,4,3]; // lottery result (demo seed)
+const receipts=new Map(),log=[];
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+const sha=async h=>hex(await crypto.subtle.digest("SHA-256",Uint8Array.from(h.match(/../g).map(x=>parseInt(x,16)))));
+const rnd=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
+const winner=r=>order[r-1],payers=r=>names.map((_,i)=>i).filter(i=>i!==winner(r));
+const msg=(t,c)=>{const m=document.getElementById("msg");m.textContent=t;m.className=c||""};
+async function receive(payer,preimage,hash){ // verifier
+ if(await sha(preimage)!==hash){msg(T().bad,"err");return false}
+ const k=round+"|"+payer;if(receipts.has(k)){msg(T().dup,"err");return false}
+ receipts.set(k,{round,payer,hash,preimage});log.push(`T${round} ${names[payer]} ${hash.slice(0,12)}…`);msg(T().ok,"good");return true}
+async function simulate(){ // other members pay via mock wallets
+ for(const p of payers(round)) if(p!==YOU&&!receipts.has(round+"|"+p)){const pre=rnd();await receive(p,pre,await sha(pre))}}
+function rel(i){let d=0,p=0;for(let r=1;r<=round;r++)if(winner(r)!==i){d++;if(receipts.has(r+"|"+i))p++}return d?Math.round(100*p/d):100}
+function draw(){const t=T(),w=winner(round),ps=payers(round),done=ps.filter(p=>receipts.has(round+"|"+p)).length;
+ document.getElementById("t").textContent=t.title;document.getElementById("lang").textContent=lang==="fr"?"Wolof":"Français";
+ document.getElementById("round").textContent=`${t.round(round,N)} · ${names[w]} ${t.gets}`;
+ document.getElementById("pot").textContent=(AMT*ps.length).toLocaleString("fr-FR")+" sats";
+ document.getElementById("prog").style.width=(100*done/ps.length)+"%";
+ document.getElementById("pay").textContent=t.pay;document.getElementById("forge").textContent=t.forge;document.getElementById("next").textContent=t.next;
+ document.getElementById("note").textContent=t.note;document.getElementById("lsum").textContent=`${t.ledger} (${log.length})`;
+ document.getElementById("ledger").innerHTML=log.map(l=>`<div><code>${l}</code></div>`).join("");
+ document.getElementById("members").innerHTML=names.map((n,i)=>{const s=i===w?"★":receipts.has(round+"|"+i)?`<span class="paid">${t.paid}</span>`:`<span class="miss">${t.miss}</span>`;
+  return `<div class="row"><span>${i===YOU?t.you+" ("+n+")":n}</span><span>${s} · ${rel(i)}% ${t.rel}</span></div>`}).join("")}
+document.getElementById("pay").onclick=async()=>{if(winner(round)===YOU)return msg(T().winner);const pre=rnd();await receive(YOU,pre,await sha(pre));await simulate();draw()};
+document.getElementById("forge").onclick=async()=>{await receive(YOU,rnd(),rnd());draw()};
+document.getElementById("next").onclick=async()=>{const done=payers(round).every(p=>receipts.has(round+"|"+p));
+ if(!done)return msg(T().wait,"err");if(round===N)return msg(T().end);round++;msg("");draw()};
+document.getElementById("lang").onclick=()=>{lang=lang==="fr"?"wo":"fr";document.documentElement.lang=lang==="fr"?"fr":"wo";draw()};
+draw();
+</script></body></html>
